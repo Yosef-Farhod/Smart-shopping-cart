@@ -19,6 +19,8 @@ void setup() {
   }
   Serial.println("\nConnected to WiFi");
   Serial.print("IP Address ESP8266: ");
+  Serial.println(WiFi.localIP());
+
 
 }
 
