@@ -1,38 +1,47 @@
-//استقيال الكود الخاص بحساس الوزن HX711 مع ESP3
-// استقيال قراءه حساس الوزن من esp8266 و ارسالها عن طريق الشبكه المحلي
-
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* ssid = "ESP32_Test";
-const char* password = "12345678";
+const char *ssid = "Yosef";
+const char *password = "28072004";
 
 WebServer server(80);
 
 float latestWeight = 0.0;
 
-void handleUpdate() {
-  if (server.hasArg("weight")) {
+void handleUpdate()
+{
+  Serial.println("Received request on /update");
+  if (server.hasArg("weight"))
+  {
     latestWeight = server.arg("weight").toFloat();
     Serial.print("Received weight: ");
     Serial.println(latestWeight);
     server.send(200, "text/plain", "Weight received");
-  } else {
+  }
+  else
+  {
     server.send(400, "text/plain", "Missing weight");
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  WiFi.softAP(ssid, password);
-  Serial.println("ESP32 Access Point Started");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.softAPIP());
+  WiFi.begin(ssid, password); // اتصال كعميل وليس كنقطة وصول
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi");
+  Serial.print("IP Addres ESP32 : ");
+  Serial.println(WiFi.localIP());
 
   server.on("/update", handleUpdate);
   server.begin();
 }
 
-void loop() {
+void loop()
+{
   server.handleClient();
 }

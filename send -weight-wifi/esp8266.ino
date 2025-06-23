@@ -4,11 +4,17 @@
 
 
 #include <ESP8266WiFi.h>
+#include <HX711.h>
 #include <ESP8266HTTPClient.h>
 
 const char* ssid = "Yosef";
 const char* password = "28072004";
 const char* host = "192.168.4.1";
+
+#define DT D5
+#define SCK D6
+
+HX711 scale;
 
 void setup() {
   Serial.begin(115200);
@@ -18,18 +24,21 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\nConnected to WiFi");
-  Serial.print("IP Address ESP8266: ");
 
+  scale.begin(DT, SCK);
+  scale.set_scale();
+  scale.tare();
 }
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    float weight = 5.5; // يمكنك تغيير القيمة هنا لأي قراءة تريد إرسالها
+    float weight = scale.get_units();
+    weight = (weight < 0) ? 0 : weight;
 
     WiFiClient client;
     HTTPClient http;
     String url = "http://" + String(host) + "/update?weight=" + String(weight, 2);
-    http.begin(client, url);
+    http.begin(client, url);  // ✅ تم التعديل هنا
     int httpCode = http.GET();
 
     if (httpCode > 0) {
