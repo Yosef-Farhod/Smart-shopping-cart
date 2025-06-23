@@ -17,7 +17,6 @@ FirebaseConfig config;
 
 String name = "";
 float price = 0;
-// float weight = 0; // حذف الوزن
 String serial = "";
 String shelf = "";
 
