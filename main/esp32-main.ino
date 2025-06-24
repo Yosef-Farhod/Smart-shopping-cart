@@ -13,10 +13,24 @@ void handleUpdate()
     Serial.println("Received request on /update");
     if (server.hasArg("serial"))
     {
-        latestSerial = server.arg("serial");
+        String latestSerial = server.arg("serial");
+        String latestName = server.hasArg("name") ? server.arg("name") : "";
+        String latestPrice = server.hasArg("price") ? server.arg("price") : "";
+        String latestCount = server.hasArg("count") ? server.arg("count") : "";
+        String latestReading = server.hasArg("reading") ? server.arg("reading") : "";
+
         Serial.print("Received serial: ");
         Serial.println(latestSerial);
-        server.send(200, "text/plain", "Serial received");
+        Serial.print("Name: ");
+        Serial.println(latestName);
+        Serial.print("Price: ");
+        Serial.println(latestPrice);
+        Serial.print("Count: ");
+        Serial.println(latestCount);
+        Serial.print("Reading: ");
+        Serial.println(latestReading);
+
+        server.send(200, "text/plain", "Data received");
     }
     else
     {
