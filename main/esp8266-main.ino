@@ -19,6 +19,7 @@ String name = "";
 float price = 0;
 String serial = "";
 String shelf = "";
+float weight = 0; // أضف متغير الوزن
 
 // بيانات وزن عشوائية لمحاكاة القراءة
 float simulated_weights[] = {
@@ -34,45 +35,6 @@ const float product_weight = 500.0; // جم
 const float threshold = 30.0;       // أقل فرق نعتبره تغيير حقيقي
 
 float previous_weight = 0.0;
-
-void process_weight_change(float diff)
-{
-    int product_count = round(diff / product_weight);
-    if (product_count > 0)
-    {
-        Serial.printf("✅ %d × %s taken\n", product_count, name.c_str());
-        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
-    }
-    else if (product_count < 0)
-    {
-        Serial.printf("🔄 %d × %s returned\n", abs(product_count), name.c_str());
-        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
-    }
-    // إرسال بيانات المنتج عند كل تغيير حقيقي (تشمل القراءة الفعلية)
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        WiFiClient client;
-        HTTPClient http;
-        String url = "http://" + String(host) +
-                     "/update?serial=" + serial +
-                     "&name=" + name +
-                     "&price=" + String(price, 2) +
-                     "&count=" + String(product_count) +
-                     "&reading=" + String(previous_weight, 2); // إضافة القراءة الحالية
-        http.begin(client, url);
-        int httpCode = http.GET();
-        if (httpCode > 0)
-        {
-            String response = http.getString();
-            Serial.println("Server response: " + response);
-        }
-        else
-        {
-            Serial.println("Connection failed");
-        }
-        http.end();
-    }
-}
 
 void setup()
 {
@@ -109,6 +71,8 @@ void setup()
         serial = fbdo.stringData();
     if (Firebase.getString(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/shelf"))
         shelf = fbdo.stringData();
+    if (Firebase.getFloat(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/weight"))
+        weight = fbdo.floatData();
 
     // عرض بيانات المنتج
     Serial.println("بيانات المنتج:");
@@ -120,10 +84,52 @@ void setup()
     Serial.println(serial);
     Serial.print("الرف: ");
     Serial.println(shelf);
+    Serial.print("الوزن: ");
+    Serial.println(weight);
     Serial.println("----------------------");
 
     previous_weight = simulated_weights[0];
     Serial.printf("Initial weight: %.2f g\n", previous_weight);
+}
+
+void process_weight_change(float diff)
+{
+    int product_count = round(diff / product_weight);
+    if (product_count > 0)
+    {
+        Serial.printf("✅ %d × %s taken\n", product_count, name.c_str());
+        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
+    }
+    else if (product_count < 0)
+    {
+        Serial.printf("🔄 %d × %s returned\n", abs(product_count), name.c_str());
+        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
+    }
+    // إرسال بيانات المنتج عند كل تغيير حقيقي (تشمل الوزن)
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        WiFiClient client;
+        HTTPClient http;
+        String url = "http://" + String(host) +
+                     "/update?serial=" + serial +
+                     "&name=" + name +
+                     "&price=" + String(price, 2) +
+                     "&count=" + String(product_count) +
+                     "&reading=" + String(previous_weight, 2) +
+                     "&weight=" + String(weight, 2); // أضف الوزن للبيانات المرسلة
+        http.begin(client, url);
+        int httpCode = http.GET();
+        if (httpCode > 0)
+        {
+            String response = http.getString();
+            Serial.println("Server response: " + response);
+        }
+        else
+        {
+            Serial.println("Connection failed");
+        }
+        http.end();
+    }
 }
 
 void loop()
