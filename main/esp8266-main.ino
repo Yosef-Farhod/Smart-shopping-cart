@@ -74,6 +74,8 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
+    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
+
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
