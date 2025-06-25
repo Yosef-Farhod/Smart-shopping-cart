@@ -31,15 +31,18 @@ float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد
 
 // بيانات وزن محاكية
 float simulated_weights[] = {
-  5000, 5005, 4998, 5002,     // استقرار
-  3990, 3985, 3988,           // أخذ 2
-  3987, 3989,                 // استقرار
-  4485                       // رجوع 1
+    5000, 5005, 4998, 5002, // استقرار
+    3990, 3985, 3988,       // أخذ 2
+    3987, 3989,             // استقرار
+    4485                    // رجوع 1
 };
 const int num_weights = sizeof(simulated_weights) / sizeof(simulated_weights[0]);
 int weight_index = 0;
 
 float previous_weight = 0.0;
+
+// متغير لمحاكاة الرقم التسلسلي المقروء من الاسكانر
+String scanned_serial = "123456"; // غيّر القيمة حسب الحاجة للاختبار
 
 void setup()
 {
@@ -74,8 +77,7 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
-    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
-
+  shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
@@ -86,8 +88,10 @@ void setup()
   // عرض إعدادات الرف
   Serial.println("📦 إعدادات الرف:");
   Serial.println("ESP32 IP: " + shelf_esp32_ip);
-  Serial.print("الوزن الكلي: "); Serial.println(shelf_total_weight);
-  Serial.print("أقل فرق وزن: "); Serial.println(shelf_min_weight_diff);
+  Serial.print("الوزن الكلي: ");
+  Serial.println(shelf_total_weight);
+  Serial.print("أقل فرق وزن: ");
+  Serial.println(shelf_min_weight_diff);
   Serial.println("----------------------");
 
   // جلب بيانات المنتج من Firebase
@@ -108,11 +112,16 @@ void setup()
 
   // عرض بيانات المنتج
   Serial.println("📄 بيانات المنتج:");
-  Serial.print("الاسم: "); Serial.println(name);
-  Serial.print("السعر: "); Serial.println(price);
-  Serial.print("الرقم التسلسلي: "); Serial.println(serial);
-  Serial.print("الرف: "); Serial.println(shelf);
-  Serial.print("الوزن: "); Serial.println(weight);
+  Serial.print("الاسم: ");
+  Serial.println(name);
+  Serial.print("السعر: ");
+  Serial.println(price);
+  Serial.print("الرقم التسلسلي: ");
+  Serial.println(serial);
+  Serial.print("الرف: ");
+  Serial.println(shelf);
+  Serial.print("الوزن: ");
+  Serial.println(weight);
   Serial.println("----------------------");
 
   // تعيين الوزن الابتدائي من البيانات
@@ -181,6 +190,33 @@ void loop()
       process_weight_change(diff);
       previous_weight = current_weight;
     }
+  }
+
+  // مقارنة الرقم التسلسلي المقروء مع رقم المنتج من فايربيز
+  if (scanned_serial == serial)
+  {
+    Serial.println("✅ تم عمل اسكان للمنتج بنجاح (Serial Match)");
+    // إرسال رد للرف (ESP32) أن الاسكان تم بنجاح
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      WiFiClient client;
+      HTTPClient http;
+      String url = "http://" + shelf_esp32_ip + "/update?scan=ok&serial=" + scanned_serial;
+      http.begin(client, url);
+      int httpCode = http.GET();
+      if (httpCode > 0)
+      {
+        String response = http.getString();
+        Serial.println("📡 Scan response sent: " + response);
+      }
+      else
+      {
+        Serial.println("❌ فشل في إرسال رد الاسكان");
+      }
+      http.end();
+    }
+    // بعد أول مطابقة، امسح المتغير حتى لا تتكرر العملية
+    scanned_serial = "";
   }
 
   delay(1500); // انتظار لمحاكاة التأخير بين القراءات

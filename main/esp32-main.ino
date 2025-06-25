@@ -13,6 +13,9 @@ String latestPrice = "";
 String latestCount = "";
 String latestReading = "";
 
+// أضف متغير جديد لمحاكاة الرقم التسلسلي المقروء من الاسكانر
+String scanned_serial = "123456"; // غيّر القيمة للاختبار
+
 void handleUpdate()
 {
     Serial.println("📥 Received request on /update");
@@ -33,6 +36,13 @@ void handleUpdate()
         Serial.println("Price: " + latestPrice);
         Serial.println("Count: " + latestCount);
         Serial.println("Reading: " + latestReading);
+
+        // مقارنة الرقم التسلسلي المقروء مع الرقم المستلم
+        if (scanned_serial == latestSerial)
+        {
+            Serial.println("🔔 تم عمل اسكان للمنتج بنجاح (Serial Match)");
+            // يمكنك هنا تنفيذ أي منطق إضافي عند المطابقة
+        }
 
         server.send(200, "text/plain", "Data received");
     }
