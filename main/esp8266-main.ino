@@ -27,7 +27,7 @@ float weight = 0; // وزن المنتج المستورد من فايربيز
 
 // إعدادات الرف
 String shelf_esp32_ip = "";
-float shelf_total_weight = 0;
+float shelf_total_weight = 0;    //
 float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد من فايربيز
 
 // توصيلات الحساس الأول
@@ -102,16 +102,11 @@ void setup()
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
 
-  if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/min_weight_diff"))
-    shelf_min_weight_diff = fbdo.floatData();
-
   // عرض إعدادات الرف
   Serial.println("📦 إعدادات الرف:");
   Serial.println("ESP32 IP: " + shelf_esp32_ip);
   Serial.print("الوزن الموجود في تعريف الوزن");
   Serial.println(shelf_total_weight);
-  Serial.print("أقل فرق وزن: ");
-  Serial.println(shelf_min_weight_diff);
   Serial.println("----------------------");
 
   // جلب بيانات المنتج من Firebase
@@ -147,9 +142,9 @@ void setup()
   // عند بدء التشغيل، عيّن previous_weight إلى الوزن الحالي من الحساسين (أو صفر)
   if (scale1.is_ready() || scale2.is_ready())
   {
-    float weight1 = scale1.is_ready() ? scale1.get_units(shelf_min_weight_diff) : 0.0;
-    float weight2 = scale2.is_ready() ? scale2.get_units(shelf_min_weight_diff) : 0.0;
-    previous_weight = weight1 + weight2;
+  float weight1 = scale1.is_ready() ? scale1.get_units(5) : 0.0;
+  float weight2 = scale2.is_ready() ? scale2.get_units(5) : 0.0;
+  previous_weight = weight1 + weight2;
   }
   else
   {
@@ -211,9 +206,9 @@ void loop()
   float weight1 = 0, weight2 = 0;
 
   if (scale1.is_ready())
-    weight1 = scale1.get_units(shelf_min_weight_diff); // استخدم الوزن من فايربيز كمعامل للمعايرة
+    weight1 = scale1.get_units(10); // يقرأ 10 مرات ويحسب المتوسط
   if (scale2.is_ready())
-    weight2 = scale2.get_units(shelf_min_weight_diff); // استخدم الوزن من فايربيز كمعامل للمعايرة
+    weight2 = scale2.get_units(10); // يقرأ 10 مرات ويحسب المتوسط
 
   if (scale1.is_ready() || scale2.is_ready())
   {
@@ -240,7 +235,7 @@ void loop()
     // معالجة تغير الوزن وإرسال البيانات إذا تجاوز الفرق الحد الأدنى
     static float last_sent_weight = 0;
     float diff = last_sent_weight - totalWeight;
-    if (abs(diff) >= shelf_min_weight_diff)
+    if (abs(diff) >= 30) // استخدام الحد الأدنى من الوزن
     {
       int product_count = round(diff / weight);
       if (product_count != 0)
