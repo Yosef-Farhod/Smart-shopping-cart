@@ -1,6 +1,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <FirebaseESP8266.h>
+#include <HX711.h>
 
 // بيانات WiFi
 const char *ssid = "Yosef";
@@ -29,20 +30,25 @@ String shelf_esp32_ip = "";
 float shelf_total_weight = 0;
 float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد من فايربيز
 
-// بيانات وزن محاكية
-float simulated_weights[] = {
-    5000, 5005, 4998, 5002, // استقرار
-    3990, 3985, 3988,       // أخذ 2
-    3987, 3989,             // استقرار
-    4485                    // رجوع 1
-};
-const int num_weights = sizeof(simulated_weights) / sizeof(simulated_weights[0]);
-int weight_index = 0;
+// توصيلات الحساس الأول
+#define DT1 D5
+#define SCK1 D6
 
-float previous_weight = 0.0;
+// توصيلات الحساس الثاني
+#define DT2 D7
+#define SCK2 D8
 
-// متغير لمحاكاة الرقم التسلسلي المقروء من الاسكانر
-String scanned_serial = "123456"; // غيّر القيمة حسب الحاجة للاختبار
+// توصيل البازر
+#define BUZZER_PIN D3
+
+// حد الوزن للتنبيه بالبـازر
+#define BUZZER_THRESHOLD 10000.0 // بالجرام
+
+HX711 scale1;
+HX711 scale2;
+
+float previous_weight = 0.0;      // تعريف المتغير هنا فقط مرة واحدة
+String scanned_serial = "123456"; // تعريف المتغير هنا فقط مرة واحدة
 
 void setup()
 {
@@ -59,6 +65,20 @@ void setup()
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
+
+  // إعداد البازر
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  // تهيئة الحساسات
+  scale1.begin(DT1, SCK1);
+  scale2.begin(DT2, SCK2);
+  scale1.set_scale(shelf_total_weight);
+  scale2.set_scale(shelf_total_weight);
+  scale1.tare();
+  scale2.tare();
+
+  Serial.println("تم تهيئة الحساسين وتصفير الوزن.");
 
   // إعدادات Firebase
   config.api_key = API_KEY;
@@ -77,7 +97,7 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
-  shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
+    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
@@ -88,7 +108,7 @@ void setup()
   // عرض إعدادات الرف
   Serial.println("📦 إعدادات الرف:");
   Serial.println("ESP32 IP: " + shelf_esp32_ip);
-  Serial.print("الوزن الكلي: ");
+  Serial.print("الوزن الموجود في تعريف الوزن");
   Serial.println(shelf_total_weight);
   Serial.print("أقل فرق وزن: ");
   Serial.println(shelf_min_weight_diff);
@@ -124,9 +144,17 @@ void setup()
   Serial.println(weight);
   Serial.println("----------------------");
 
-  // تعيين الوزن الابتدائي من البيانات
-  previous_weight = simulated_weights[0];
-  Serial.printf("⚖️ الوزن الابتدائي: %.2f g\n", previous_weight);
+  // عند بدء التشغيل، عيّن previous_weight إلى الوزن الحالي من الحساسين (أو صفر)
+  if (scale1.is_ready() || scale2.is_ready())
+  {
+    float weight1 = scale1.is_ready() ? scale1.get_units(shelf_min_weight_diff) : 0.0;
+    float weight2 = scale2.is_ready() ? scale2.get_units(shelf_min_weight_diff) : 0.0;
+    previous_weight = weight1 + weight2;
+  }
+  else
+  {
+    previous_weight = 0.0;
+  }
 }
 
 // دالة لمعالجة تغير الوزن الفعلي
@@ -178,18 +206,83 @@ void process_weight_change(float diff)
 // الحلقة الرئيسية لمراقبة الوزن
 void loop()
 {
-  if (weight_index < num_weights - 1)
+  // قراءة الوزن من الحساسين إذا كانا جاهزين
+  float totalWeight = 0;
+  float weight1 = 0, weight2 = 0;
+
+  if (scale1.is_ready())
+    weight1 = scale1.get_units(shelf_min_weight_diff); // استخدم الوزن من فايربيز كمعامل للمعايرة
+  if (scale2.is_ready())
+    weight2 = scale2.get_units(shelf_min_weight_diff); // استخدم الوزن من فايربيز كمعامل للمعايرة
+
+  if (scale1.is_ready() || scale2.is_ready())
   {
-    float current_weight = simulated_weights[++weight_index];
-    float diff = previous_weight - current_weight;
 
-    Serial.printf("⚖️ الوزن الحالي: %.2f g | الفرق: %.2f g\n", current_weight, diff);
+    totalWeight = weight1 + weight2;
 
-    if (abs(diff) >= shelf_min_weight_diff) // نستخدم القيمة من Firebase هنا
+    Serial.print("وزن 1: ");
+    Serial.print(weight1);
+    Serial.print(" جم | وزن 2: ");
+    Serial.print(weight2);
+    Serial.print(" جم | الإجمالي: ");
+    Serial.print(totalWeight);
+    Serial.println(" جم");
+
+    if (totalWeight > BUZZER_THRESHOLD)
     {
-      process_weight_change(diff);
-      previous_weight = current_weight;
+      digitalWrite(BUZZER_PIN, HIGH);
     }
+    else
+    {
+      digitalWrite(BUZZER_PIN, LOW);
+    }
+
+    // معالجة تغير الوزن وإرسال البيانات إذا تجاوز الفرق الحد الأدنى
+    static float last_sent_weight = 0;
+    float diff = last_sent_weight - totalWeight;
+    if (abs(diff) >= shelf_min_weight_diff)
+    {
+      int product_count = round(diff / weight);
+      if (product_count != 0)
+      {
+        if (product_count > 0)
+          Serial.printf("✅ %d × %s تم أخذها\n", product_count, name.c_str());
+        else
+          Serial.printf("🔄 %d × %s تم إرجاعها\n", abs(product_count), name.c_str());
+        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
+
+        // إرسال البيانات إلى الرف عبر HTTP
+        if (WiFi.status() == WL_CONNECTED)
+        {
+          WiFiClient client;
+          HTTPClient http;
+          String url = "http://" + shelf_esp32_ip +
+                       "/update?serial=" + serial +
+                       "&name=" + name +
+                       "&price=" + String(price, 2) +
+                       "&count=" + String(product_count) +
+                       "&reading=" + String(totalWeight, 2) +
+                       "&weight=" + String(weight, 2);
+          http.begin(client, url);
+          int httpCode = http.GET();
+          if (httpCode > 0)
+          {
+            String response = http.getString();
+            Serial.println("📡 Server response: " + response);
+          }
+          else
+          {
+            Serial.println("❌ فشل في الاتصال بالسيرفر");
+          }
+          http.end();
+        }
+        last_sent_weight = totalWeight;
+      }
+    }
+  }
+  else
+  {
+    Serial.println("خطأ: أحد الحساسات غير جاهز.");
   }
 
   // مقارنة الرقم التسلسلي المقروء مع رقم المنتج من فايربيز
@@ -219,5 +312,5 @@ void loop()
     scanned_serial = "";
   }
 
-  delay(1500); // انتظار لمحاكاة التأخير بين القراءات
+  delay(3000);
 }
