@@ -8,8 +8,6 @@ WebServer server(80);
 
 // متغيرات عامة لتخزين آخر البيانات المستلمة
 String latestSerial = "";
-String latestName = "";
-String latestPrice = "";
 String latestCount = "";
 String latestReading = "";
 
@@ -24,16 +22,12 @@ void handleUpdate()
     {
         // تحديث القيم من الطلب
         latestSerial = server.arg("serial");
-        latestName = server.hasArg("name") ? server.arg("name") : "";
-        latestPrice = server.hasArg("price") ? server.arg("price") : "";
         latestCount = server.hasArg("count") ? server.arg("count") : "";
         latestReading = server.hasArg("reading") ? server.arg("reading") : "";
 
         // عرض البيانات على الـ Serial Monitor
         Serial.println("✅ تم استلام البيانات:");
         Serial.println("Serial: " + latestSerial);
-        Serial.println("Name: " + latestName);
-        Serial.println("Price: " + latestPrice);
         Serial.println("Count: " + latestCount);
         Serial.println("Reading: " + latestReading);
 
@@ -86,6 +80,12 @@ void loop()
     server.handleClient();
 }
 
+// الكود الحالي للسلة (ESP32) بالفعل يستقبل كل البيانات ويراقب الرقم التسلسلي ويطابقه مع المتغير scanned_serial.
+// لا تحتاج لتعديل إضافي إذا كنت تريد فقط استقبال البيانات من الرف (ESP8266) والتحقق من الرقم التسلسلي.
+// إذا أردت إضافة منطق إضافي عند المطابقة أو إرسال رد، يمكنك ذلك هنا.
+// الكود الحالي للسلة (ESP32) بالفعل يستقبل كل البيانات ويراقب الرقم التسلسلي ويطابقه مع المتغير scanned_serial.
+// لا تحتاج لتعديل إضافي إذا كنت تريد فقط استقبال البيانات من الرف (ESP8266) والتحقق من الرقم التسلسلي.
+// إذا أردت إضافة منطق إضافي عند المطابقة أو إرسال رد، يمكنك ذلك هنا.
 // الكود الحالي للسلة (ESP32) بالفعل يستقبل كل البيانات ويراقب الرقم التسلسلي ويطابقه مع المتغير scanned_serial.
 // لا تحتاج لتعديل إضافي إذا كنت تريد فقط استقبال البيانات من الرف (ESP8266) والتحقق من الرقم التسلسلي.
 // إذا أردت إضافة منطق إضافي عند المطابقة أو إرسال رد، يمكنك ذلك هنا.
