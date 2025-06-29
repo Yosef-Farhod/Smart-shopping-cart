@@ -19,10 +19,7 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // بيانات المنتج
-String name = "";
-float price = 0;
 String serial = "";
-String shelf = "";
 float weight = 0; // وزن المنتج المستورد من فايربيز
 
 // إعدادات الرف
@@ -97,7 +94,7 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
-    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
+  shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
@@ -110,31 +107,16 @@ void setup()
   Serial.println("----------------------");
 
   // جلب بيانات المنتج من Firebase
-  if (Firebase.getString(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/name"))
-    name = fbdo.stringData();
-
-  if (Firebase.getFloat(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/price"))
-    price = fbdo.floatData();
-
   if (Firebase.getString(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/serial"))
     serial = fbdo.stringData();
-
-  if (Firebase.getString(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/shelf"))
-    shelf = fbdo.stringData();
 
   if (Firebase.getFloat(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/weight"))
     weight = fbdo.floatData(); // نستخدم هذا كوزن المنتج
 
   // عرض بيانات المنتج
   Serial.println("📄 بيانات المنتج:");
-  Serial.print("الاسم: ");
-  Serial.println(name);
-  Serial.print("السعر: ");
-  Serial.println(price);
   Serial.print("الرقم التسلسلي: ");
   Serial.println(serial);
-  Serial.print("الرف: ");
-  Serial.println(shelf);
   Serial.print("الوزن: ");
   Serial.println(weight);
   Serial.println("----------------------");
@@ -142,9 +124,9 @@ void setup()
   // عند بدء التشغيل، عيّن previous_weight إلى الوزن الحالي من الحساسين (أو صفر)
   if (scale1.is_ready() || scale2.is_ready())
   {
-  float weight1 = scale1.is_ready() ? scale1.get_units(5) : 0.0;
-  float weight2 = scale2.is_ready() ? scale2.get_units(5) : 0.0;
-  previous_weight = weight1 + weight2;
+    float weight1 = scale1.is_ready() ? scale1.get_units(5) : 0.0;
+    float weight2 = scale2.is_ready() ? scale2.get_units(5) : 0.0;
+    previous_weight = weight1 + weight2;
   }
   else
   {
@@ -161,9 +143,9 @@ void process_weight_change(float diff)
     return; // تجاهل التغييرات غير المؤثرة
 
   if (product_count > 0)
-    Serial.printf("✅ %d × %s تم أخذها\n", product_count, name.c_str());
+    Serial.printf("✅ %d تم أخذها\n", product_count);
   else
-    Serial.printf("🔄 %d × %s تم إرجاعها\n", abs(product_count), name.c_str());
+    Serial.printf("🔄 %d تم إرجاعها\n", abs(product_count));
 
   Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
 
@@ -175,8 +157,6 @@ void process_weight_change(float diff)
 
     String url = "http://" + shelf_esp32_ip +
                  "/update?serial=" + serial +
-                 "&name=" + name +
-                 "&price=" + String(price, 2) +
                  "&count=" + String(product_count) +
                  "&reading=" + String(previous_weight, 2) +
                  "&weight=" + String(weight, 2);
@@ -241,9 +221,9 @@ void loop()
       if (product_count != 0)
       {
         if (product_count > 0)
-          Serial.printf("✅ %d × %s تم أخذها\n", product_count, name.c_str());
+          Serial.printf("✅ %d تم أخذها\n", product_count);
         else
-          Serial.printf("🔄 %d × %s تم إرجاعها\n", abs(product_count), name.c_str());
+          Serial.printf("🔄 %d تم إرجاعها\n", abs(product_count));
         Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
 
         // إرسال البيانات إلى الرف عبر HTTP
@@ -253,8 +233,6 @@ void loop()
           HTTPClient http;
           String url = "http://" + shelf_esp32_ip +
                        "/update?serial=" + serial +
-                       "&name=" + name +
-                       "&price=" + String(price, 2) +
                        "&count=" + String(product_count) +
                        "&reading=" + String(totalWeight, 2) +
                        "&weight=" + String(weight, 2);
