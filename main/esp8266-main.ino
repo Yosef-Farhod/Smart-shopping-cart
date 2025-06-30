@@ -94,17 +94,10 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
-  shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
+    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
-
-  // عرض إعدادات الرف
-  Serial.println("📦 إعدادات الرف:");
-  Serial.println("ESP32 IP: " + shelf_esp32_ip);
-  Serial.print("الوزن الموجود في تعريف الوزن");
-  Serial.println(shelf_total_weight);
-  Serial.println("----------------------");
 
   // جلب بيانات المنتج من Firebase
   if (Firebase.getString(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/serial"))
@@ -112,6 +105,13 @@ void setup()
 
   if (Firebase.getFloat(fbdo, "/products/CyhYDpfJgNTcpQpMcfWK/weight"))
     weight = fbdo.floatData(); // نستخدم هذا كوزن المنتج
+
+  // عرض إعدادات الرف
+  Serial.println("📦 إعدادات الرف:");
+  Serial.println("ESP32 IP: " + shelf_esp32_ip);
+  Serial.print("الوزن الموجود في تعريف الوزن");
+  Serial.println(shelf_total_weight);
+  Serial.println("----------------------");
 
   // عرض بيانات المنتج
   Serial.println("📄 بيانات المنتج:");
@@ -286,4 +286,5 @@ void loop()
   }
 
   delay(3000);
-}
+} 
+ 
