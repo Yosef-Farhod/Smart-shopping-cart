@@ -24,7 +24,7 @@ float weight = 0; // وزن المنتج المستورد من فايربيز
 
 // إعدادات الرف
 String shelf_esp32_ip = "";
-float shelf_total_weight = 0;    //
+float shelf_total_weight = 0;    // ضبط الوزن للحساس
 float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد من فايربيز
 
 // توصيلات الحساس الأول
@@ -46,6 +46,11 @@ HX711 scale2;
 
 float previous_weight = 0.0;      // تعريف المتغير هنا فقط مرة واحدة
 String scanned_serial = "123456"; // تعريف المتغير هنا فقط مرة واحدة
+
+// متغيرات لمتابعة التأكيد من السلة
+bool waiting_for_scan_ok = false;
+unsigned long scan_request_time = 0;
+const unsigned long SCAN_TIMEOUT = 20000; // 10 ثواني
 
 void setup()
 {
@@ -94,7 +99,7 @@ void setup()
     shelf_esp32_ip = fbdo.stringData();
   else
     Serial.println("❌ فشل في جلب IP: " + fbdo.errorReason());
-    shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
+  shelf_esp32_ip = "192.168.43.21"; // تعيين IP افتراضي في حالة الفشل
 
   if (Firebase.getFloat(fbdo, "/users/fj@fj,com/shelf_settings/total_weight"))
     shelf_total_weight = fbdo.floatData();
@@ -137,10 +142,10 @@ void setup()
 // دالة لمعالجة تغير الوزن الفعلي
 void process_weight_change(float diff)
 {
-  int product_count = round(diff / weight); // نستخدم الوزن الفعلي من Firebase
+  int product_count = round(diff / weight);
 
   if (product_count == 0)
-    return; // تجاهل التغييرات غير المؤثرة
+    return;
 
   if (product_count > 0)
     Serial.printf("✅ %d تم أخذها\n", product_count);
@@ -158,8 +163,7 @@ void process_weight_change(float diff)
     String url = "http://" + shelf_esp32_ip +
                  "/update?serial=" + serial +
                  "&count=" + String(product_count) +
-                 "&reading=" + String(previous_weight, 2) +
-                 "&weight=" + String(weight, 2);
+                 "&reading=" + String(previous_weight, 2);
 
     http.begin(client, url);
     int httpCode = http.GET();
@@ -168,6 +172,12 @@ void process_weight_change(float diff)
     {
       String response = http.getString();
       Serial.println("📡 Server response: " + response);
+      // بعد إرسال الطلب، فعّل وضع الانتظار للتأكيد فقط إذا تم أخذ منتج
+      if (product_count > 0)
+      {
+        waiting_for_scan_ok = true;
+        scan_request_time = millis();
+      }
     }
     else
     {
@@ -274,6 +284,9 @@ void loop()
       {
         String response = http.getString();
         Serial.println("📡 Scan response sent: " + response);
+        // عند وصول التأكيد، أوقف البازر وامسح حالة الانتظار
+        waiting_for_scan_ok = false;
+        digitalWrite(BUZZER_PIN, LOW);
       }
       else
       {
@@ -281,10 +294,25 @@ void loop()
       }
       http.end();
     }
-    // بعد أول مطابقة، امسح المتغير حتى لا تتكرر العملية
     scanned_serial = "";
   }
 
+  // منطق الانتظار وتشغيل البازر إذا لم يصل التأكيد خلال المهلة
+  if (waiting_for_scan_ok)
+  {
+    if (millis() - scan_request_time > SCAN_TIMEOUT)
+    {
+      digitalWrite(BUZZER_PIN, HIGH); // شغّل البازر
+    }
+    else
+    {
+      digitalWrite(BUZZER_PIN, LOW); // لا تشغّل البازر أثناء الانتظار
+    }
+  }
+  else
+  {
+    digitalWrite(BUZZER_PIN, LOW); // تأكد أن البازر مطفأ إذا لا يوجد انتظار
+  }
+
   delay(3000);
-} 
- 
+}
