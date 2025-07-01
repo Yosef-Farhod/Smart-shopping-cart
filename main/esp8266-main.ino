@@ -26,8 +26,7 @@ float weight = 0; // وزن المنتج المستورد من فايربيز
 
 // إعدادات الرف
 String shelf_esp32_ip = "";
-float shelf_total_weight = 0;    // ضبط الوزن للحساس
-float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد من فايربيز
+float shelf_total_weight = 0; // ضبط الوزن للحساس
 
 // توصيلات الحساس الأول
 #define DT1 D5
@@ -143,11 +142,14 @@ void setup()
 
 // دالة لمعالجة تغير الوزن الفعلي
 void process_weight_change(float diff)
-{ 
+{
   int product_count = 0;
-  if (weight > 0) {
+  if (weight > 0)
+  {
     product_count = round(diff / weight);
-  } else {
+  }
+  else
+  {
     Serial.println("❌ تحذير: الوزن غير صالح أو غير مُحمّل من Firebase!");
     return;
   }
