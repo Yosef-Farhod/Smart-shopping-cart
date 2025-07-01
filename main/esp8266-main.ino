@@ -76,10 +76,7 @@ void setup()
   // تهيئة الحساسات
   scale1.begin(DT1, SCK1);
   scale2.begin(DT2, SCK2);
-  scale1.set_scale(shelf_total_weight);
-  scale2.set_scale(shelf_total_weight);
-  scale1.tare();
-  scale2.tare();
+  // لا تضع set_scale/tare هنا، انتظر حتى تجلب بيانات فايربيز
 
   Serial.println("تم تهيئة الحساسين وتصفير الوزن.");
 
@@ -126,6 +123,12 @@ void setup()
   Serial.print("الوزن: ");
   Serial.println(weight);
   Serial.println("----------------------");
+
+  // بعد جلب بيانات المعايرة من فايربيز، هيئ الحساسات
+  scale1.set_scale(shelf_total_weight);
+  scale2.set_scale(shelf_total_weight);
+  scale1.tare();
+  scale2.tare();
 
   // عند بدء التشغيل، عيّن previous_weight إلى الوزن الحالي من الحساسين (أو صفر)
   if (scale1.is_ready() || scale2.is_ready())
@@ -232,44 +235,48 @@ void loop()
       digitalWrite(BUZZER_PIN, LOW);
     }
 
-    // معالجة تغير الوزن وإرسال البيانات إذا تجاوز الفرق الحد الأدنى
-    static float last_sent_weight = 0;
-    float diff = totalWeight - last_sent_weight;
-    if (abs(diff) >= 30) // استخدام الحد الأدنى من الوزن
+    // تحقق من صلاحية قراءة الحساسين قبل أي معالجة
+    if (!isnan(weight1) && !isnan(weight2)) // إذا كانت القراءة صالحة
     {
-      int product_count = round(diff / weight);
-      if (product_count != 0)
+      // معالجة تغير الوزن وإرسال البيانات إذا تجاوز الفرق الحد الأدنى
+      static float last_sent_weight = 0;
+      float diff = totalWeight - last_sent_weight;
+      if (abs(diff) >= 30) // استخدام الحد الأدنى من الوزن
       {
-        if (product_count > 0)
-          Serial.printf("✅ %d تم أخذها\n", product_count);
-        else
-          Serial.printf("🔄 %d تم إرجاعها\n", abs(product_count));
-        Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
-
-        // إرسال البيانات إلى الرف عبر HTTP
-        if (WiFi.status() == WL_CONNECTED)
+        int product_count = round(diff / weight);
+        if (product_count != 0)
         {
-          WiFiClient client;
-          HTTPClient http;
-          String url = "http://" + shelf_esp32_ip +
-                       "/update?serial=" + serial +
-                       "&count=" + String(product_count) +
-                       "&reading=" + String(totalWeight, 2) +
-                       "&weight=" + String(weight, 2);
-          http.begin(client, url);
-          int httpCode = http.GET();
-          if (httpCode > 0)
-          {
-            String response = http.getString();
-            Serial.println("📡 Server response: " + response);
-          }
+          if (product_count > 0)
+            Serial.printf("✅ %d تم أخذها\n", product_count);
           else
+            Serial.printf("🔄 %d تم إرجاعها\n", abs(product_count));
+          Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
+
+          // إرسال البيانات إلى الرف عبر HTTP
+          if (WiFi.status() == WL_CONNECTED)
           {
-            Serial.println("❌ فشل في الاتصال بالسيرفر");
+            WiFiClient client;
+            HTTPClient http;
+            String url = "http://" + shelf_esp32_ip +
+                         "/update?serial=" + serial +
+                         "&count=" + String(product_count) +
+                         "&reading=" + String(totalWeight, 2) +
+                         "&weight=" + String(weight, 2);
+            http.begin(client, url);
+            int httpCode = http.GET();
+            if (httpCode > 0)
+            {
+              String response = http.getString();
+              Serial.println("📡 Server response: " + response);
+            }
+            else
+            {
+              Serial.println("❌ فشل في الاتصال بالسيرفر");
+            }
+            http.end();
           }
-          http.end();
+          last_sent_weight = totalWeight;
         }
-        last_sent_weight = totalWeight;
       }
     }
   }
