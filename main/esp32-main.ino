@@ -170,33 +170,43 @@ void loop()
     // مراقبة الوزن في السلة
     static float last_weight = 0.0;
     float current_weight = scale.get_units(10); // متوسط 10 قراءات
-    Serial.print("وزن السلة: ");
-    Serial.println(current_weight);
 
-    // إذا في انتظار اسكان منتجات، راقب الوزن
-    if (waiting_for_scan && products_to_scan > 0)
+    // تحقق من صلاحية قراءة الحساس قبل أي معالجة
+    if (!isnan(current_weight) && current_weight != 0.0)
     {
-        float expected_weight = products_to_scan * (latestWeight > 0 ? latestWeight : 100); // استخدم وزن المنتج أو قيمة تقريبية
-        float weight_diff = current_weight - last_weight;
+        Serial.print("وزن السلة: ");
+        Serial.println(current_weight);
 
-        // إذا زاد الوزن بمقدار مقارب للمنتجات ولم يتم اسكان كل المنتجات خلال المهلة، شغّل البازر
-        if ((current_weight - last_weight) >= (expected_weight * 0.8) && scanned_count < products_to_scan)
+        // إذا في انتظار اسكان منتجات، راقب الوزن
+        if (waiting_for_scan && products_to_scan > 0)
         {
-            if (millis() - scan_start_time > SCAN_TIMEOUT)
+            float expected_weight = products_to_scan * (latestWeight > 0 ? latestWeight : 100); // استخدم وزن المنتج أو قيمة تقريبية
+            float weight_diff = current_weight - last_weight;
+
+            // إذا زاد الوزن بمقدار مقارب للمنتجات ولم يتم اسكان كل المنتجات خلال المهلة، شغّل البازر
+            if ((current_weight - last_weight) >= (expected_weight * 0.8) && scanned_count < products_to_scan)
             {
-                buzzer_on = true;
+                if (millis() - scan_start_time > SCAN_TIMEOUT)
+                {
+                    buzzer_on = true;
+                }
+            }
+
+            // إذا تم اسكان كل المنتجات، أوقف البازر
+            if (scanned_count >= products_to_scan)
+            {
+                buzzer_on = false;
+                waiting_for_scan = false;
             }
         }
-
-        // إذا تم اسكان كل المنتجات، أوقف البازر
-        if (scanned_count >= products_to_scan)
+        else
         {
             buzzer_on = false;
-            waiting_for_scan = false;
         }
     }
     else
     {
+        Serial.println("⚠️ قراءة الحساس غير صالحة أو صفرية!");
         buzzer_on = false;
     }
 
