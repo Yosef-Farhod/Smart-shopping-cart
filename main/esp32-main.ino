@@ -1,18 +1,17 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <HX711.h>
+#include <HTTPClient.h> // أضف هذا السطر إذا لم يكن موجوداً
 
 // تعيين بنات الاتصال التسلسلي مع GM65
-#define GM65_RX 16 // اختر دبابيس مناسبة للـ ESP32 (مثال: GPIO16)
-#define GM65_TX 17 // مثال: GPIO17
+#define RXD2 16 // توصيل RX من GM65
+#define TXD2 17 // توصيل TX من GM65
 
 // توصيلات حساس الوزن
 #define SCALE_DT 18  // مثال: GPIO18
 #define SCALE_SCK 19 // مثال: GPIO19
 
 #define BUZZER_PIN 21 // مثال: GPIO21
-
-HardwareSerial barcodeSerial(2); // استخدم UART2 على ESP32
 
 const char *ssid = "Yosef";
 const char *password = "28072004";
@@ -117,12 +116,12 @@ void setup()
     Serial.println("🚀 Server started");
 
     // تهيئة الاسكانر
-    barcodeSerial.begin(9600, SERIAL_8N1, GM65_RX, GM65_TX);
+    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
     Serial.println("Barcode scanner ready...");
 
     // تهيئة حساس الوزن
     scale.begin(SCALE_DT, SCALE_SCK);
-    scale.set_scale(); // تحتاج للمعايرة الفعلية حسب حساسك
+    scale.set_scale(350); // تحتاج للمعايرة الفعلية حسب حساسك
     scale.tare();
     Serial.println("Weight scale ready...");
 
@@ -135,12 +134,12 @@ void loop()
     server.handleClient();
 
     // التحقق من وصول بيانات من الماسح
-    if (barcodeSerial.available())
+    if (Serial2.available())
     {
         String barcode = "";
-        while (barcodeSerial.available())
+        while (Serial2.available())
         {
-            char c = barcodeSerial.read();
+            char c = Serial2.read();
             barcode += c;
             delay(5); // لتفادي فقد البيانات
         }
@@ -218,5 +217,5 @@ void loop()
 
     last_weight = current_weight;
 
-    delay(500);
+    delay(1000);
 }
