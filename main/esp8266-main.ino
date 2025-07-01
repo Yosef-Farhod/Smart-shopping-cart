@@ -18,6 +18,8 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
+int product_count = round(diff / weight);
+
 // بيانات المنتج
 String serial = "";
 float weight = 0; // وزن المنتج المستورد من فايربيز
@@ -39,17 +41,17 @@ float shelf_min_weight_diff = 0; // أقل فرق وزن حقيقي مستورد
 #define BUZZER_PIN D3
 
 // حد الوزن للتنبيه بالبـازر
-#define BUZZER_THRESHOLD 10000.0 // بالجرام
+#define BUZZER_THRESHOLD 4900 // بالجرام
 
 HX711 scale1;
 HX711 scale2;
 
-float previous_weight = 0.0;      // تعريف المتغير هنا فقط مرة واحدة
-String scanned_serial = "123456"; // تعريف المتغير هنا فقط مرة واحدة
+float previous_weight = 0.0; // تعريف المتغير هنا فقط مرة واحدة
+// لم يعد هناك حاجة لمتغير scanned_serial، سنستقبل الرقم التسلسلي من السلة عبر HTTP
 
 // متغيرات لمتابعة التأكيد من السلة
 bool waiting_for_scan_ok = false;
-unsigned long scan_request_time = 0;
+unsigned long scan_request_time = 0;      // <-- كان معرف غلط
 const unsigned long SCAN_TIMEOUT = 20000; // 10 ثواني
 
 void setup()
@@ -141,8 +143,14 @@ void setup()
 
 // دالة لمعالجة تغير الوزن الفعلي
 void process_weight_change(float diff)
-{
-  int product_count = round(diff / weight);
+{ 
+  int product_count = 0;
+  if (weight > 0) {
+    product_count = round(diff / weight);
+  } else {
+    Serial.println("❌ تحذير: الوزن غير صالح أو غير مُحمّل من Firebase!");
+    return;
+  }
 
   if (product_count == 0)
     return;
@@ -224,7 +232,7 @@ void loop()
 
     // معالجة تغير الوزن وإرسال البيانات إذا تجاوز الفرق الحد الأدنى
     static float last_sent_weight = 0;
-    float diff = last_sent_weight - totalWeight;
+    float diff = totalWeight - last_sent_weight;
     if (abs(diff) >= 30) // استخدام الحد الأدنى من الوزن
     {
       int product_count = round(diff / weight);
@@ -268,34 +276,10 @@ void loop()
     Serial.println("خطأ: أحد الحساسات غير جاهز.");
   }
 
-  // مقارنة الرقم التسلسلي المقروء مع رقم المنتج من فايربيز
-  if (scanned_serial == serial)
-  {
-    Serial.println("✅ تم عمل اسكان للمنتج بنجاح (Serial Match)");
-    // إرسال رد للرف (ESP32) أن الاسكان تم بنجاح
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      WiFiClient client;
-      HTTPClient http;
-      String url = "http://" + shelf_esp32_ip + "/update?scan=ok&serial=" + scanned_serial;
-      http.begin(client, url);
-      int httpCode = http.GET();
-      if (httpCode > 0)
-      {
-        String response = http.getString();
-        Serial.println("📡 Scan response sent: " + response);
-        // عند وصول التأكيد، أوقف البازر وامسح حالة الانتظار
-        waiting_for_scan_ok = false;
-        digitalWrite(BUZZER_PIN, LOW);
-      }
-      else
-      {
-        Serial.println("❌ فشل في إرسال رد الاسكان");
-      }
-      http.end();
-    }
-    scanned_serial = "";
-  }
+  // استقبال تأكيد الاسكان من السلة عبر HTTP (scan=ok)
+  // هذا يتم تلقائياً في دالة handleUpdate في كود السلة (ESP32)
+  // في كود الرف (ESP8266)، لا داعي لمقارنة متغير محلي مثل scanned_serial مع serial
+  // لأن التأكيد يصل عبر HTTP ويوقف البازر في منطق الانتظار بالفعل
 
   // منطق الانتظار وتشغيل البازر إذا لم يصل التأكيد خلال المهلة
   if (waiting_for_scan_ok)
