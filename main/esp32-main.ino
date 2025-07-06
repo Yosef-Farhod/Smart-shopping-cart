@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <HX711.h>
-#include <HTTPClient.h> // أضف هذا السطر إذا لم يكن موجوداً
+#include <HTTPClient.h> // هذا السطر إذا لم يكن موجوداً أضف
 
 // تعيين بنات الاتصال التسلسلي مع GM65
 #define RXD2 16 // توصيل RX من GM65
@@ -170,50 +170,58 @@ void loop()
     static float last_weight = 0.0;
     float current_weight = scale.get_units(10); // متوسط 10 قراءات
 
-    // تحقق من صلاحية قراءة الحساس قبل أي معالجة
+    // منطق البازر الجديد
+    static bool buzzer_error_active = false;
+    static unsigned long buzzer_error_start = 0;
+
     if (!isnan(current_weight) && current_weight != 0.0)
     {
         Serial.print("وزن السلة: ");
         Serial.println(current_weight);
 
-        // إذا في انتظار اسكان منتجات، راقب الوزن
         if (waiting_for_scan && products_to_scan > 0)
         {
-            float expected_weight = products_to_scan * (latestWeight > 0 ? latestWeight : 100); // استخدم وزن المنتج أو قيمة تقريبية
+            float expected_weight = products_to_scan * (latestWeight > 0 ? latestWeight : 100);
             float weight_diff = current_weight - last_weight;
 
-            // إذا زاد الوزن بمقدار مقارب للمنتجات ولم يتم اسكان كل المنتجات خلال المهلة، شغّل البازر
-            if ((current_weight - last_weight) >= (expected_weight * 0.8) && scanned_count < products_to_scan)
+            // إذا زاد الوزن ولم يتم عمل اسكانر لأي منتج (scanned_count == 0)، شغّل البازر لمدة 5 ثواني فقط
+            if ((current_weight - last_weight) > 30 && scanned_count == 0)
             {
-                if (millis() - scan_start_time > SCAN_TIMEOUT)
+                if (!buzzer_error_active)
                 {
-                    buzzer_on = true;
+                    buzzer_error_active = true;
+                    buzzer_error_start = millis();
+                    digitalWrite(BUZZER_PIN, HIGH);
                 }
             }
 
             // إذا تم اسكان كل المنتجات، أوقف البازر
             if (scanned_count >= products_to_scan)
             {
-                buzzer_on = false;
+                buzzer_error_active = false;
+                digitalWrite(BUZZER_PIN, LOW);
                 waiting_for_scan = false;
             }
         }
         else
         {
-            buzzer_on = false;
+            buzzer_error_active = false;
+            digitalWrite(BUZZER_PIN, LOW);
         }
     }
     else
     {
         Serial.println("⚠️ قراءة الحساس غير صالحة أو صفرية!");
-        buzzer_on = false;
+        buzzer_error_active = false;
+        digitalWrite(BUZZER_PIN, LOW);
     }
 
-    // تحكم في البازر
-    if (buzzer_on)
-        digitalWrite(BUZZER_PIN, HIGH);
-    else
+    // إطفاء البازر بعد 5 ثواني من الخطأ
+    if (buzzer_error_active && (millis() - buzzer_error_start >= 5000))
+    {
+        buzzer_error_active = false;
         digitalWrite(BUZZER_PIN, LOW);
+    }
 
     last_weight = current_weight;
 
