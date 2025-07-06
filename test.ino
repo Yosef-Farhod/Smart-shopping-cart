@@ -38,6 +38,7 @@ float previous_weight = 0.0;
 bool waiting_for_scan_ok = false;
 unsigned long scan_request_time = 0;
 const unsigned long SCAN_TIMEOUT = 20000;
+const float MIN_WEIGHT_DIFF = 30.0;
 
 void setup()
 {
@@ -117,61 +118,6 @@ void setup()
     }
 }
 
-void process_weight_change(float diff)
-{
-    int product_count = 0;
-    if (weight > 0)
-    {
-        product_count = round(diff / weight);
-    }
-    else
-    {
-        Serial.println("❌ تحذير: الوزن غير صالح أو غير مُحمّل من Firebase!");
-        return;
-    }
-
-    if (product_count == 0)
-        return;
-
-    if (product_count > 0)
-        Serial.printf("✅ %d تم أخذها\n", product_count);
-    else
-        Serial.printf("🔄 %d تم إرجاعها\n", abs(product_count));
-
-    Serial.printf("📦 Barcode: %s\n\n", serial.c_str());
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        WiFiClient client;
-        HTTPClient http;
-
-        String url = "http://" + shelf_esp32_ip +
-                     "/update?serial=" + serial +
-                     "&count=" + String(product_count) +
-                     "&reading=" + String(previous_weight, 2);
-
-        http.begin(client, url);
-        int httpCode = http.GET();
-
-        if (httpCode > 0)
-        {
-            String response = http.getString();
-            Serial.println("📡 Server response: " + response);
-            if (product_count > 0)
-            {
-                waiting_for_scan_ok = true;
-                scan_request_time = millis();
-            }
-        }
-        else
-        {
-            Serial.println("❌ فشل في الاتصال بالسيرفر");
-        }
-
-        http.end();
-    }
-}
-
 void loop()
 {
     float totalWeight = 0;
@@ -209,7 +155,7 @@ void loop()
         {
             static float last_sent_weight = 0;
             float diff = totalWeight - last_sent_weight;
-            if (abs(diff) >= 30)
+            if (abs(diff) >= MIN_WEIGHT_DIFF)
             {
                 int product_count = round(diff / weight);
                 if (product_count != 0)
