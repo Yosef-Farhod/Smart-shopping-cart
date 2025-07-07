@@ -3,21 +3,23 @@
 #include <HX711.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <FirebaseESP32.h>
 
-// تعريفات قارئ الباركود GM65
 #define RXD2 21
 #define TXD2 22
 
-// تعريفات حساس الوزن
 #define SCALE_DT 18
 #define SCALE_SCK 19
 #define BUZZER_PIN 23
 
-// بيانات Wi-Fi
 const char *ssid = "Yosef";
 const char *password = "28072004";
 
-// متغيرات الوزن والمراقبة
+#define API_KEY "AIzaSyCCi6Yvyfh7zPY_DqczkMcBUFdkmmI8xTA"
+#define DATABASE_URL "https://smart-cart-f9c56-default-rtdb.firebaseio.com/"
+#define USER_EMAIL "yoseffarhod@gmail.com"
+#define USER_PASSWORD "y28072004"
+
 String latestSerial = "";
 String latestCount = "";
 String latestReading = "";
@@ -30,28 +32,22 @@ bool waiting_for_scan = false;
 
 WebServer server(80);
 HX711 scale;
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+float coins = 0.0;
+
+const String scriptURL = "https://script.google.com/macros/s/AKfycbzFeE5NMAsaHIhrLmi4GCtSKLB6ZM2YkDLDd6pJmkFiZWBa-mrpB-QjeGcy848FQwV_/exec";
+const String totalURL = "https://script.google.com/macros/s/AKfycbyV2zZqaaD0Te1n2GCYE82Gv-eycTawzO0-w7hSJNfCAq4WRBS64nTyPef_lS16v8FNCg/exec";
 
 void handleUpdate()
 {
-    Serial.println("📥 Received request on /update");
-
     if (server.hasArg("serial"))
     {
-        // تحديث القيم من الطلب
         latestSerial = server.arg("serial");
         latestCount = server.hasArg("count") ? server.arg("count") : "";
         latestReading = server.hasArg("reading") ? server.arg("reading") : "";
         latestWeight = server.hasArg("weight") ? server.arg("weight").toFloat() : 0.0;
-
-        // عرض البيانات على الـ Serial Monitor
-        Serial.println("✅ تم استلام البيانات:");
-        Serial.println("Serial: " + latestSerial);
-        Serial.println("Count: " + latestCount);
-        Serial.println("Reading: " + latestReading);
-        Serial.print("Weight: ");
-        Serial.println(latestWeight);
-
-        // ابدأ الانتظار للاسكان إذا count > 0
         products_to_scan = latestCount.toInt();
         scanned_count = 0;
         if (products_to_scan > 0)
@@ -59,71 +55,115 @@ void handleUpdate()
             waiting_for_scan = true;
             scan_start_time = millis();
         }
-
         server.send(200, "text/plain", "Data received");
     }
     else if (server.hasArg("scan") && server.arg("scan") == "ok" && server.hasArg("serial"))
     {
-        // استقبل اسكان جديد
         if (waiting_for_scan && scanned_count < products_to_scan)
         {
             scanned_count++;
-            Serial.printf("✅ تم اسكان منتج (%d/%d)\n", scanned_count, products_to_scan);
-
-            if (scanned_count >= products_to_scan)
-            {
-                waiting_for_scan = false;
-                digitalWrite(BUZZER_PIN, LOW);
-                Serial.println("✅ تم اسكان كل المنتجات المطلوبة.");
-            }
         }
-
         server.send(200, "text/plain", "Scan OK received");
     }
     else
     {
-        Serial.println("❌ Missing serial in request");
         server.send(400, "text/plain", "Missing serial");
     }
 }
 
-// دالة اختبار (اختياري)
 void handleRoot()
 {
     server.send(200, "text/plain", "ESP32 Receiver is running");
 }
 
+void getProductInfo(String code)
+{
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        return;
+    }
+    HTTPClient http;
+    String url = scriptURL + "?code=" + code;
+    http.begin(url);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    if (httpCode > 0)
+    {
+        String response = http.getString();
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, response);
+        if (!error)
+        {
+            String name = doc["name"];
+            float price = doc["price"];
+            if (coins >= price)
+            {
+                float new_coins = coins - price;
+                if (Firebase.setFloat(fbdo, "/users/fj@fj,com/coins", new_coins))
+                {
+                    coins = new_coins;
+                    sendToTotal(name, price);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    digitalWrite(BUZZER_PIN, HIGH);
+                    delay(300);
+                    digitalWrite(BUZZER_PIN, LOW);
+                    delay(300);
+                }
+            }
+        }
+    }
+    http.end();
+}
+
+void sendToTotal(String name, float price)
+{
+    HTTPClient http;
+    name.replace(" ", "%20");
+    String url = totalURL + "?action=add&name=" + name + "&price=" + String(price, 2);
+    http.begin(url);
+    int res = http.GET();
+    if (res > 0)
+    {
+        String resText = http.getString();
+    }
+    http.end();
+}
+
 void setup()
 {
     Serial.begin(115200);
-
-    // الاتصال بالواي فاي
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
         Serial.print(".");
     }
-    Serial.println("\n✅ Connected to WiFi");
-    Serial.print("🌐 ESP32 IP Address: ");
-    Serial.println(WiFi.localIP());
-
-    // ربط المسارات
+    config.api_key = API_KEY;
+    config.database_url = DATABASE_URL;
+    auth.user.email = USER_EMAIL;
+    auth.user.password = USER_PASSWORD;
+    Firebase.reconnectNetwork(true);
+    fbdo.setBSSLBufferSize(1024, 1024);
+    fbdo.setResponseSize(512);
+    Firebase.begin(&config, &auth);
+    Firebase.setDoubleDigits(5);
+    config.timeout.serverResponse = 10000;
+    if (Firebase.getFloat(&fbdo, "/users/fj@fj,com/coins"))
+    {
+        coins = fbdo.floatData();
+    }
     server.on("/", handleRoot);
     server.on("/update", handleUpdate);
     server.begin();
-    Serial.println("🚀 Server started");
-
-    // تهيئة الاسكانر
     Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
-    Serial.println("📦 Barcode scanner ready");
-
-    // تهيئة حساس الوزن
     scale.begin(SCALE_DT, SCALE_SCK);
-    scale.set_scale(350); // تحتاج للمعايرة الفعلية حسب حساسك
+    scale.set_scale(350);
     scale.tare();
-    Serial.println("⚖ Weight sensor ready");
-
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW);
 }
@@ -131,22 +171,14 @@ void setup()
 void loop()
 {
     server.handleClient();
-
-    // قراءة الباركود من GM65 وإرسال scan=ok تلقائياً للرف
     if (Serial2.available())
     {
         String barcode = Serial2.readStringUntil('\n');
         barcode.trim();
-
         if (barcode.length() > 0)
         {
-            Serial.println("📦 تم قراءة الباركود: " + barcode);
-
-            // أدخل IP الرف هنا بشكل ثابت إذا أردت
-            String shelf_ip = "192.168.43.19"; // <-- عدل هذا للـ IP الخاص بالرف
-            // أو استخدم latestSerial إذا كنت تستقبله من مكان آخر
-            // String shelf_ip = latestSerial;
-
+            getProductInfo(barcode);
+            String shelf_ip = "192.168.43.19";
             String url = "http://" + shelf_ip + "/update?scan=ok&serial=" + barcode;
             WiFiClient client;
             HTTPClient http;
@@ -155,28 +187,16 @@ void loop()
             if (httpCode > 0)
             {
                 String response = http.getString();
-                Serial.println("📡 Scan response sent: " + response);
-            }
-            else
-            {
-                Serial.println("❌ فشل في إرسال رد الاسكان");
             }
             http.end();
         }
     }
-
-    // منطق الوزن والبازر
     static float last_weight = 0.0;
     float current_weight = scale.get_units(10);
-
     static bool buzzer_error_active = false;
     static unsigned long buzzer_error_start = 0;
-
     if (!isnan(current_weight))
     {
-        Serial.print("⚖ الوزن الحالي: ");
-        Serial.println(current_weight);
-
         if (waiting_for_scan && products_to_scan > 0)
         {
             if ((current_weight - last_weight) > 30 && scanned_count == 0)
@@ -188,7 +208,6 @@ void loop()
                     digitalWrite(BUZZER_PIN, HIGH);
                 }
             }
-
             if (scanned_count >= products_to_scan)
             {
                 buzzer_error_active = false;
@@ -197,26 +216,6 @@ void loop()
             }
         }
     }
-
-    // منطق كشف وضع منتج بدون اسكان (فرق الوزن >= 100)
-    float weight_diff = current_weight - last_weight;
-    if (weight_diff > 100 && scanned_count == 0)
-    {
-        if (!buzzer_error_active)
-        {
-            buzzer_error_active = true;
-            digitalWrite(BUZZER_PIN, HIGH);
-            Serial.println("🚨 منتج تم وضعه بدون اسكان! البازر يعمل.");
-        }
-    }
-    // إذا نقص الوزن (أي العميل شال المنتج)، أوقف البازر فوراً
-    else if (weight_diff < -10 && buzzer_error_active)
-    {
-        buzzer_error_active = false;
-        digitalWrite(BUZZER_PIN, LOW);
-        Serial.println("✅ المنتج تم رفعه، البازر توقف.");
-    }
-
     last_weight = current_weight;
     delay(1000);
 }
